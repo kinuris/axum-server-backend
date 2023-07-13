@@ -1,8 +1,8 @@
-use axum::{routing::get, Router, response::IntoResponse, extract::Path};
+use axum::{routing::get, Router, response::IntoResponse, extract::Path, http::Request, body::Body};
 use axum_server_backend::responders;
 
-async fn root(Path(path): Path<String>) -> impl IntoResponse {
-    responders::file::open(format!("./sites/{}", path).into()).await
+async fn root(Path(path): Path<String>, req: Request<Body>) -> impl IntoResponse {
+    responders::file::open(format!("./sites/{}", path).into(), &req).await
 }
 
 #[tokio::main]

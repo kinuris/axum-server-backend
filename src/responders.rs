@@ -1,13 +1,14 @@
 pub mod file {
     use std::{path::PathBuf, hash::Hasher, collections::hash_map::DefaultHasher};
     
-    use axum::{response::IntoResponse, http::{StatusCode, HeaderMap, header, HeaderValue}, body::StreamBody};
+    use axum::{response::IntoResponse, http::{StatusCode, HeaderMap, header, HeaderValue, Request}, body::{StreamBody, Body}};
+    use chrono::{DateTime, Local};
     use tokio_util::io::ReaderStream;
     use std::hash::Hash;
 
     use crate::extensions::PathBufDetemineMimeExt;
 
-    pub async fn open(path: PathBuf) -> Result<(HeaderMap, impl IntoResponse), StatusCode> {
+    pub async fn open(path: PathBuf, req: &Request<Body>) -> Result<(HeaderMap, impl IntoResponse), StatusCode> {
         let file = tokio::fs::File::open(&path).await.map_err(|_| StatusCode::NOT_FOUND)?;
 
         let stream = ReaderStream::new(file);
@@ -20,7 +21,17 @@ pub mod file {
                 let mut hasher = DefaultHasher::new();
                 time.hash(&mut hasher);
 
-                headers.append(header::ETAG, HeaderValue::from(hasher.finish()));
+                let hash = hasher.finish();
+                let match_header = req.headers().get("If-None-Match");
+
+                if match_header.is_some() && match_header.unwrap().as_bytes() == hash.to_string().as_bytes() {
+                    return Err(StatusCode::NOT_MODIFIED);
+                }
+
+                headers.append(header::ETAG, HeaderValue::from(hash));
+
+                let dt: DateTime<Local> = time.into();
+                headers.append(header::LAST_MODIFIED, HeaderValue::from_str(&dt.to_rfc2822()).unwrap());
             };
         };
 
